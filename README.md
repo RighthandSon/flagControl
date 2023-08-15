@@ -45,6 +45,8 @@ These custom BZDB variables can be configured with `-set` in configuration files
 | `/flagcontrol on, off, list, add, remove` | FLAGCONTROL | `on` enables the plugin, `off` disables, `list` lists all flags presently affected, `add` a flag to the list, `remove` a flag from the list |
 
 
-## License
+## License and Credits
 
 [LICENSE](LICENSE)
+
+Thanks to zeL who contributed with the making of this.
