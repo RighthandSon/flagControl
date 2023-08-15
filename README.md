@@ -1,7 +1,7 @@
 # Flag Control
 
 ![Minimum BZFlag Version](https://img.shields.io/badge/BZFlag-v2.4.0+-blue.svg)
-[![License](https://img.shields.io/github/license/Righthandson/flagControl.svg)](LICENSE.md)
+[![License](https://img.shields.io/github/license/Righthandson/flagControl.svg)](LICENSE)
 
 When there are less players than the number determined by `_allFlagsAllowedAt` then players holding a flag listed in the config file will drop it after one kill.
 
@@ -47,4 +47,4 @@ These custom BZDB variables can be configured with `-set` in configuration files
 
 ## License
 
-[LICENSE](LICENSE.md)
+[LICENSE](LICENSE)
