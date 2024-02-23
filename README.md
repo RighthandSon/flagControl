@@ -19,11 +19,12 @@ This plug-in follows [standard instructions for compiling plug-ins](https://gith
 
 ### Configuration File
 
-A file with a list of flags that will be "controlled". Each flag must be on a new line, e.g.
+A file with a list of flags that will be "controlled". Can be followed with a comma or space separated number. The number defines how many kills you can get before the flag is dropped. If no number is set it defaults to 1, if the number is set to 0 the flag will be dropped as soon as it is grabbed. Each flag must be on a new line, e.g.
 ```
 ST
-L
-GM
+L 1
+GM,2
+CL,0
 ```
 
 ### Custom BZDB Variables
