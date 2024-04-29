@@ -38,6 +38,7 @@ These custom BZDB variables can be configured with `-set` in configuration files
 | Name | Type | Default | Description |
 | ---- | ---- | ------- | ----------- |
 | `_allFlagsAllowedAt` | int | 4 | Number of players needed for plugin to no longer take effect. |
+| `_oneKillOnlyAt` | int | 0 | Number of players where all flags are limited to one kill. |
 
 ### Custom Slash Commands
 

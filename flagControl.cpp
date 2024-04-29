@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include "bzfsAPI.h"
 #include "plugin_files.h"
 #define BUFFLEN 256
@@ -33,12 +34,12 @@ private:
     virtual void LoadControlledFlags(const char* commandline);
     virtual void UpdateState(void);
     virtual void ReloadControlledFlagsFile();
-    virtual void SplitFlags();
+    virtual std::pair<std::string, int> SplitFlag(std::string);
 
     bool allowFC;
     bool currentlyFC;
+    int playerCount;
 
-    std::vector<std::string> controlledFlags;
     std::vector<std::pair<std::string, int>> flagInfo;
     int flagKills[256] = {0};
     std::string loadPath(bz_ApiString path);
@@ -49,7 +50,7 @@ BZ_PLUGIN(flagControl)
 
 const char* flagControl::Name()
 {
-    return "flagControl v1.2.0";
+    return "flagControl v1.3.0";
 }
 
 void flagControl::Init(const char* config)
@@ -68,17 +69,11 @@ void flagControl::Init(const char* config)
     UpdateState();
 
     bz_registerCustomBZDBInt("_allFlagsAllowedAt", 4, 0, false);
+    bz_registerCustomBZDBInt("_oneKillOnlyAt", 0, 0, false);
 
     allowFC = true;
     currentlyFC = false;
-    if (controlledFlags.empty())
-    {
-        bz_debugMessage(2, "Warning! :: Flag control :: Failed to load flags");
-    }
-    else
-    {
-        bz_debugMessagef(2, "DEBUG :: flagControl :: Loaded %d flags", controlledFlags.size());
-    }
+    playerCount = 0;
 }
 
 void flagControl::Cleanup()
@@ -94,7 +89,6 @@ void flagControl::Event(bz_EventData* eventData)
     {
     case bz_ePlayerDieEvent:
     {
-        // This event is called each time a flag is grabbed by a player
         bz_PlayerDieEventData_V2* data = (bz_PlayerDieEventData_V2*)eventData;
 
         if (allowFC && currentlyFC && data->killerID != data->playerID)
@@ -122,15 +116,12 @@ void flagControl::Event(bz_EventData* eventData)
                     break;
                 }
             }
+            if (allowFC && playerCount <= bz_getBZDBInt("_oneKillOnlyAt"))
+            {
+                bz_removePlayerFlag(data->killerID);
+                bz_sendTextMessage(BZ_SERVER, data->killerID, "Flag control in effect; you've been forced to drop that flag. Find another!");
+            }
         }
-
-        // Data
-        // ----
-        // (int)         playerID  - The player that grabbed the flag
-        // (int)         flagID    - The flag ID that was grabbed
-        // (const char*) flagType  - The flag abbreviation of the flag that was grabbed
-        // (float[3])    pos       - The position at which the flag was grabbed
-        // (double)      eventTime - This value is the local server time of the event.
     }
     break;
 
@@ -189,9 +180,13 @@ void flagControl::Event(bz_EventData* eventData)
 
     case bz_ePlayerJoinEvent:
     {
-        // This event is called each time a player joins the game
         bz_PlayerJoinPartEventData_V1* data = (bz_PlayerJoinPartEventData_V1*)eventData;
-        UpdateState();
+        if (data->record->team != eObservers)
+        {
+            playerCount += 1;
+            UpdateState();
+        }
+        
         if (currentlyFC && allowFC && bz_getPlayerCount() > 2)
             bz_sendTextMessage(BZ_SERVER, data->playerID, "Flag control in effect with fewer players online. Some flags might limit the number of kills.");
     }
@@ -199,7 +194,12 @@ void flagControl::Event(bz_EventData* eventData)
 
     case bz_ePlayerPartEvent:
     {
-        UpdateState();
+        bz_PlayerJoinPartEventData_V1* data = (bz_PlayerJoinPartEventData_V1*)eventData;
+        if (data->record->team != eObservers)
+        {
+            playerCount -= 1;
+            UpdateState();
+        }
     }
     break;
 
@@ -263,26 +263,39 @@ bool flagControl::SlashCommand(int playerID, bz_ApiString command, bz_ApiString 
             else if (params->get(0) == "add")
             {
                 std::string flag = params->get(1);
-                controlledFlags.push_back(flag);
-                SplitFlags();
-                bz_sendTextMessage(BZ_SERVER, eAdministrators, (flag + " has been added as a controlled flag.").c_str());
-               
+                for (auto& x : flag)
+                {
+                    x = toupper(x);
+                }
+                std::pair<std::string, int> flagDiv = SplitFlag(flag);
+                auto removal = std::remove_if(flagInfo.begin(), flagInfo.end(), [flagDiv](std::pair<std::string, int> str){return str.first == flagDiv.first;});
+                flagInfo.erase(removal, flagInfo.end());
+                flagInfo.push_back(flagDiv);
+                bz_sendTextMessage(BZ_SERVER, eAdministrators, (flag + " has been added as a controlled flag by " + name + ".").c_str());
             }
             else if (params->get(0) == "remove")
             {
                 std::string flag = params->get(1);
-                bool foundFlag = false;
-                for (unsigned int i = 0; i < controlledFlags.size(); i++)
+                for (auto& x : flag)
                 {
-                    if (controlledFlags.at(i).find(flag) != std::string::npos)
+                    x = toupper(x);
+                }
+                std::pair<std::string, int> flagDiv = SplitFlag(flag);
+                bool foundFlag = false;
+                for (unsigned int i = 0; i < flagInfo.size(); i++)
+                {
+                    if(flagInfo.at(i).first == flagDiv.first)
                     {
-                        controlledFlags.erase(controlledFlags.begin() + i);
-                        SplitFlags();
-                        bz_sendTextMessage(BZ_SERVER, eAdministrators, (flag + " has been removed from being a controlled flag.").c_str());
                         foundFlag = true;
                     }
                 }
-                if (!foundFlag)
+                auto removal = std::remove_if(flagInfo.begin(), flagInfo.end(), [flagDiv](std::pair<std::string, int> str){return str.first == flagDiv.first;});
+                flagInfo.erase(removal, flagInfo.end());
+                if (foundFlag == true)
+                {
+                    bz_sendTextMessage(BZ_SERVER, eAdministrators, (flagDiv.first + " was removed by " + name).c_str());
+                }
+                else
                 {
                     bz_sendTextMessage(BZ_SERVER, playerID, ("\"" + flag + "\" is not a controlled flag.").c_str());
                     bz_sendTextMessage(BZ_SERVER, playerID, ("You can add it by using \"add\" " + flag).c_str());
@@ -304,32 +317,19 @@ bool flagControl::SlashCommand(int playerID, bz_ApiString command, bz_ApiString 
 
 void flagControl::UpdateState()
 {
-
-    bz_APIIntList *playerList = bz_newIntList();
-    bz_getPlayerIndexList(playerList);
-    int ji = 0;
-    for (unsigned int i = 0; i < playerList->size(); i++) {
-
-        if (bz_getPlayerByIndex(playerList->get(i))->team != eObservers)
-        {
-            ji++;
-        }
-    }
-
-    bz_deleteIntList(playerList);
-    if (ji >= bz_getBZDBInt("_allFlagsAllowedAt")) {
-        if (allowFC && currentlyFC == true) {
+    if (playerCount >= bz_getBZDBInt("_allFlagsAllowedAt")) {
+        if (allowFC && currentlyFC) {
             // Was on, now off - broadcast message
             bz_sendTextMessage(BZ_SERVER, BZ_ALLUSERS, "Enough players now online, flag control is no longer in effect");
+            currentlyFC = false;
         }
-        currentlyFC = false;
     }
     else {
-        if (allowFC && currentlyFC == false && bz_getPlayerCount() != 1) {
+        if (allowFC && !currentlyFC && playerCount > 1) {
             // Was off, now on - broadcast message
             bz_sendTextMessage(BZ_SERVER, BZ_ALLUSERS, "Flag control in effect with fewer players online. Some flags might limit the number of kills.");
+            currentlyFC = true;
         }
-        currentlyFC = true;
     }
 }
 
@@ -354,40 +354,41 @@ std::string flagControl::loadPath(bz_ApiString path)
 
 void flagControl::ReloadControlledFlagsFile()
 {
-    controlledFlags.clear();
+    std::vector<std::string> controlledFlags;
     if (!controlledFlagsFile.empty())
     {
         controlledFlags = getFileTextLines(controlledFlagsFile);
-        SplitFlags();
+        flagInfo.clear();
+        for(unsigned int i = 0; i < controlledFlags.size(); i++)
+        {
+            flagInfo.push_back(SplitFlag(controlledFlags.at(i)));
+        }
     }
 }
 
-void flagControl::SplitFlags()
+std::pair<std::string, int> flagControl::SplitFlag(std::string rawFlag)
 {
-    flagInfo.clear();
-    for(unsigned int i = 0; i < controlledFlags.size(); i++)
+    char division[BUFFLEN];
+    std::strncpy(division, rawFlag.c_str(), BUFFLEN);
+    division[BUFFLEN-1]='\0';
+    char * divided;
+    std::pair<std::string, int> pair;
+    pair.first = "";
+    pair.second = 0;
+    divided = std::strtok(division, " ,");
+    if (divided != NULL)
     {
-        char division[BUFFLEN];
-        std::strncpy(division, controlledFlags.at(i).c_str(), BUFFLEN);
-        division[BUFFLEN-1]='\0';
-        char * divided;
-        std::pair<std::string, int> pair;
-        divided = std::strtok(division, " ,");
-
-        if (divided != NULL)
+        pair.first = divided;
+        divided = std::strtok(NULL, " ,");
+        if (divided == NULL)
         {
-            pair.first = divided;
-            divided = std::strtok(NULL, " ,");
-            if (divided == NULL)
-            {
-                pair.second = 1;
-                flagInfo.push_back(pair);
-                continue;
-            }
-            pair.second = atoi(divided);
-            flagInfo.push_back(pair);
+            pair.second = 1;
+            return pair;
         }
+        pair.second = atoi(divided);
+        return pair;
     }
+    return pair;
 }
 // Local Variables: ***
 // mode: C++ ***
