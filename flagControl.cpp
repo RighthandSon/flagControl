@@ -304,6 +304,7 @@ bool flagControl::SlashCommand(int playerID, bz_ApiString command, bz_ApiString 
             else
             {
                 bz_sendTextMessage(BZ_SERVER, playerID, "Incorrect syntax! /flagcontrol on|off|list|add|remove.");
+                bz_sendTextMessage(BZ_SERVER, playerID, "To change the number of players when in effect use /set _allFlagsAllowedAt #");
             }
         }
         else
