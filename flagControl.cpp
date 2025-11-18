@@ -50,7 +50,7 @@ BZ_PLUGIN(flagControl)
 
 const char* flagControl::Name()
 {
-    return "flagControl v1.3.0";
+    return "flagControl v1.3.7";
 }
 
 void flagControl::Init(const char* config)
@@ -91,13 +91,19 @@ void flagControl::Event(bz_EventData* eventData)
     {
         bz_PlayerDieEventData_V2* data = (bz_PlayerDieEventData_V2*)eventData;
 
-        if (allowFC && currentlyFC && data->killerID != data->playerID)
+        if (allowFC && playerCount <= bz_getBZDBInt("_oneKillOnlyAt") && bz_getPlayerFlag(data->killerID) != NULL && data->killerID != data->playerID)
         {
+            bz_removePlayerFlag(data->killerID);
+            bz_sendTextMessage(BZ_SERVER, data->killerID, "Flag control in effect; you've been forced to drop that flag. Find another!");
+        }
+        else if (allowFC && currentlyFC && data->killerID != data->playerID)
+        {
+            flagKills[data->killerID] +=1;
             for (unsigned int i = 0; i < flagInfo.size(); i++)
             {
                 if (data->flagKilledWith == flagInfo.at(i).first)
                 {
-                    flagKills[data->killerID] +=1;
+                    
                     int killsLeft = flagInfo.at(i).second - flagKills[data->killerID];
                     if(killsLeft <= 3 && killsLeft > 1)
                     {
@@ -115,11 +121,6 @@ void flagControl::Event(bz_EventData* eventData)
                     }
                     break;
                 }
-            }
-            if (allowFC && playerCount <= bz_getBZDBInt("_oneKillOnlyAt"))
-            {
-                bz_removePlayerFlag(data->killerID);
-                bz_sendTextMessage(BZ_SERVER, data->killerID, "Flag control in effect; you've been forced to drop that flag. Find another!");
             }
         }
     }
@@ -183,11 +184,11 @@ void flagControl::Event(bz_EventData* eventData)
         bz_PlayerJoinPartEventData_V1* data = (bz_PlayerJoinPartEventData_V1*)eventData;
         if (data->record->team != eObservers)
         {
-            playerCount += 1;
+            playerCount = bz_getPlayerCount() - bz_getTeamCount(eObservers);
             UpdateState();
         }
         
-        if (currentlyFC && allowFC && bz_getPlayerCount() > 2)
+        if (currentlyFC && allowFC && playerCount > 2 && data->record->team != eObservers)
             bz_sendTextMessage(BZ_SERVER, data->playerID, "Flag control in effect with fewer players online. Some flags might limit the number of kills.");
     }
     break;
@@ -195,9 +196,9 @@ void flagControl::Event(bz_EventData* eventData)
     case bz_ePlayerPartEvent:
     {
         bz_PlayerJoinPartEventData_V1* data = (bz_PlayerJoinPartEventData_V1*)eventData;
-        if (data->record->team != eObservers)
+        if (data->record->team != eObservers && data->record->canSpawn == true)
         {
-            playerCount -= 1;
+            playerCount = bz_getPlayerCount() - bz_getTeamCount(eObservers)- 1;
             UpdateState();
         }
     }
