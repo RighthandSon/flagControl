@@ -33,6 +33,7 @@ public:
 private:
     virtual void LoadControlledFlags(const char* commandline);
     virtual void UpdateState(void);
+    virtual void EnforceHeldFlags(void);
     virtual void ReloadControlledFlagsFile();
     virtual std::pair<std::string, int> SplitFlag(std::string);
 
@@ -50,7 +51,7 @@ BZ_PLUGIN(flagControl)
 
 const char* flagControl::Name()
 {
-    return "flagControl v1.3.7";
+    return "flagControl v1.3.8";
 }
 
 void flagControl::Init(const char* config)
@@ -70,6 +71,7 @@ void flagControl::Init(const char* config)
 
     bz_registerCustomBZDBInt("_allFlagsAllowedAt", 4, 0, false);
     bz_registerCustomBZDBInt("_oneKillOnlyAt", 0, 0, false);
+    bz_registerCustomBZDBInt("_enforceOnEffect", 2, 0, false);
 
     allowFC = true;
     currentlyFC = false;
@@ -331,8 +333,48 @@ void flagControl::UpdateState()
             // Was off, now on - broadcast message
             bz_sendTextMessage(BZ_SERVER, BZ_ALLUSERS, "Flag control in effect with fewer players online. Some flags might limit the number of kills.");
             currentlyFC = true;
+            EnforceHeldFlags();
         }
     }
+}
+
+void flagControl::EnforceHeldFlags()
+{
+    // When flag control comes into effect, act on players already holding a
+    // drop-on-grab (0 kill) controlled flag. _enforceOnEffect modes:
+    //   0 = off       - no engage-time action
+    //   1 = next kill - notify holder; flag drops on their next kill (die path)
+    //   2 = instant   - force-drop the flag immediately
+    int mode = bz_getBZDBInt("_enforceOnEffect");
+    if (mode <= 0)
+        return;
+
+    bz_APIIntList* players = bz_getPlayerIndexList();
+    for (unsigned int i = 0; i < players->size(); i++)
+    {
+        int playerID = players->get(i);
+        const char* heldFlag = bz_getPlayerFlag(playerID);
+        if (heldFlag == NULL)
+            continue;
+
+        for (unsigned int j = 0; j < flagInfo.size(); j++)
+        {
+            if (flagInfo.at(j).first == heldFlag && flagInfo.at(j).second == 0)
+            {
+                if (mode >= 2)
+                {
+                    bz_removePlayerFlag(playerID);
+                    bz_sendTextMessage(BZ_SERVER, playerID, "Flag control now in effect; you've been forced to drop that flag. Find another!");
+                }
+                else
+                {
+                    bz_sendTextMessage(BZ_SERVER, playerID, "Flag control now in effect; you may keep that flag for one more kill.");
+                }
+                break;
+            }
+        }
+    }
+    bz_deleteIntList(players);
 }
 
 void flagControl::LoadControlledFlags(const char *commandline)
