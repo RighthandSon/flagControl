@@ -39,6 +39,7 @@ These custom BZDB variables can be configured with `-set` in configuration files
 | ---- | ---- | ------- | ----------- |
 | `_allFlagsAllowedAt` | int | 4 | Number of players needed for plugin to no longer take effect. |
 | `_oneKillOnlyAt` | int | 0 | Number of players where all flags are limited to one kill. |
+| `_enforceOnEffect` | int | 2 | Action taken when flag control comes into effect (players leave) on players already holding a drop-on-grab (0 kill) controlled flag. `0` = off (no engage-time action; normal kill limits still apply on kills); `1` = next kill (notify the holder; the flag drops on their next kill); `2` = instant (force-drop the flag immediately). |
 
 ### Custom Slash Commands
 
